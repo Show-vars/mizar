@@ -6,6 +6,8 @@
 #include "ringbuffer.h"
 #include "extend.h"
 #include "output/output.h"
+#include "decoder/decoder.h"
+#include "decoder/decoder_impl.h"
 #include "util.h"
 
 struct playback_state {
@@ -20,6 +22,8 @@ struct playback_state {
 };
 
 struct playback_state state;
+audio_format_t af = af_endian(0) | af_signed(1) | af_depth(16) |
+                      af_rate(44100) | af_channels(2);
 
 static void producer_loop(void* arg) {
   mdebug("[PRODUCER] STARTING UP");
@@ -28,25 +32,22 @@ static void producer_loop(void* arg) {
   size_t r;
   size_t w;
   size_t space;
+  decoder_data_t decoder_data;
+  decoder_data.af = af;
 
-  FILE *f = fopen("./test4.wav", "rb");
-  fseek(f, 44, SEEK_SET);
+  decoder_mp3.open(&decoder_data);
 
   while(1) {
-    //mdebug("[PRODUCER] LOOP TICK");
-
     uv_mutex_lock(&state.buffer_mutex);
     space = ringbuffer_get_space(state.buffer);
     uv_mutex_unlock(&state.buffer_mutex);
-    //mdebug("[PRODUCER] BUFFER SPACE %d", space);
 
     if(space <= 0) {
       msleep(50);
       continue;
     }
     
-    r = fread(buf, 1, min(sizeof(buf), space), f);
-    //mdebug("[PRODUCER] DECODER READ %d", r);
+    r = decoder_mp3.read(&decoder_data, buf, min(sizeof(buf), space));
 
     if(r <= 0) {
       msleep(50);
@@ -56,8 +57,6 @@ static void producer_loop(void* arg) {
     uv_mutex_lock(&state.buffer_mutex);
     w = ringbuffer_write(state.buffer, buf, r);
     uv_mutex_unlock(&state.buffer_mutex);
-    //mdebug("[PRODUCER] BUFFER WRITE %d", w);
-
   }
 }
 
@@ -70,8 +69,7 @@ static void consumer_loop(void* arg) {
   size_t available;
   size_t space;
 
-  audio_format_t af = af_endian(0) | af_signed(1) | af_depth(16) |
-                      af_rate(44100) | af_channels(2);
+  
 
   output_device_ops.init();
   output_device_ops.open(af);

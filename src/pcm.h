@@ -40,8 +40,8 @@ typedef uint32_t audio_format_t;
 #define af_rate(val)            ( ((val) << AF_RATE_SHIFT     ) & AF_RATE_MASK )
 #define af_channels(val)        ( ((val) << AF_CHANNELS_SHIFT ) & AF_CHANNELS_MASK )
 
-#define af_get_sample_size(af)	( af_get_depth((af))       >> 3 )
-#define af_get_frame_size(af)	  ( af_get_sample_size((af)) * af_get_channels((af)) )
-#define af_get_second_size(af)	( af_get_rate((af))        * af_get_frame_size((af)) )
+#define af_get_sample_size(af)    ( af_get_depth((af))       >> 3 )
+#define af_get_frame_size(af)	    ( af_get_sample_size((af)) * af_get_channels((af)) )
+#define af_get_second_size(af)    ( af_get_rate((af))        * af_get_frame_size((af)) )
 
 #endif

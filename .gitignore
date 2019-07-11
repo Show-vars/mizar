@@ -1,4 +1,5 @@
 .vscode/
 builddir/
 *.wav
-
+*.mp3
+*.flac

@@ -9,8 +9,8 @@ mizar_sources = [
 ]
 
 mizar_deps = [
-  dependency('libuv', version: '>=1.23'),
-  dependency('alsa', version:  '>=1.1.8'),
+  dependency('libuv', version: '>=1.18'),
+  dependency('alsa', version:  '>=1.1.3'),
   dependency('luajit', version:  '>=2.0.0')
 ]
 
