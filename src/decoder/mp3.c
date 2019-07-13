@@ -29,7 +29,7 @@ int decoder_mp3_close(decoder_data_t *data) {
 int decoder_mp3_read(decoder_data_t *data, uint8_t *buffer, size_t count) {
   drmp3 *mp3 = data->priv;
 
-  long frames = drmp3_read_pcm_frames_s16(mp3, count / af_get_frame_size(data->af), buffer);
+  long frames = drmp3_read_pcm_frames_s16(mp3, count / af_get_frame_size(data->af), (drmp3_int16*) buffer);
 
   return frames * af_get_frame_size(data->af);
 }
@@ -46,7 +46,7 @@ double decoder_mp3_duration(decoder_data_t *data) {
   drmp3 *mp3 = data->priv;
 
   long frames = drmp3_get_pcm_frame_count(mp3) / af_get_rate(data->af);
-  
+
   return frames;
 }
 

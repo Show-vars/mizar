@@ -9,9 +9,6 @@
   #define min(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
-void mdie(const char* format, ...);
-void mdebug(const char* format, ...);
-
 void* mmalloc(size_t size);
 void msleep(const unsigned int ms);
 

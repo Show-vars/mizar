@@ -13,6 +13,8 @@ typedef struct {
 struct decoder_info {
   const char* name;
   const char* impl;
+
+  // This arrays must ends with NULL pointer
   const char *const* ext;
   const char *const* mime;
 };

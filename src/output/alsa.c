@@ -1,7 +1,9 @@
 #include <alsa/asoundlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include "output.h"
 #include "pcm.h"
+#include "log.h"
 #include "util.h"
 
 #define ALSA_BUFFER_TIME_MAX 300 * 1000;  // 300 ms
@@ -17,46 +19,73 @@ static snd_pcm_status_t *status;
 
 /* dummy alsa error handler */
 static void error_handler(const char *file, int line, const char *function,
-                          int err, const char *fmt, ...) {}
+                          int err, const char *fmt, ...) {
+  va_list argptr;
+  va_start(argptr, fmt);
+  log_writev(MIZAR_LOGLEVEL_WARN, fmt, argptr);
+  va_end(argptr);
+}
 
 static int alsa_set_hw_params() {
   int rc, dir;
 
   snd_pcm_hw_params_t *hwparams = NULL;
   rc = snd_pcm_hw_params_malloc(&hwparams);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_malloc");
+  if (rc < 0) {
+    log_error("snd_pcm_hw_params_malloc");
+    return -1;
+  }
 
   rc = snd_pcm_hw_params_any(alsa_handle, hwparams);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_any");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_any");
+    return -1;
+  }
 
   unsigned int buffer_time_max = ALSA_BUFFER_TIME_MAX;
-  rc = snd_pcm_hw_params_set_buffer_time_max(alsa_handle, hwparams,
-                                             &buffer_time_max, &dir);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_set_buffer_time_max");
+  rc = snd_pcm_hw_params_set_buffer_time_max(alsa_handle, hwparams, &buffer_time_max, &dir);
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_set_buffer_time_max");
+    return -1;
+  }
 
   alsa_can_pause = snd_pcm_hw_params_can_pause(hwparams);
 
-  rc = snd_pcm_hw_params_set_access(alsa_handle, hwparams,
-                                    SND_PCM_ACCESS_RW_INTERLEAVED);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_set_access");
+  rc = snd_pcm_hw_params_set_access(alsa_handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED);
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_set_access");
+    return -1;
+  }
 
   alsa_fmt = snd_pcm_build_linear_format(
       af_get_depth(alsa_af), af_get_depth(alsa_af),
       af_get_signed(alsa_af) ? 0 : 1, af_get_endian(alsa_af));
   rc = snd_pcm_hw_params_set_format(alsa_handle, hwparams, alsa_fmt);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_set_format");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_set_format");
+    return -1;
+  }
 
   rc = snd_pcm_hw_params_set_channels(alsa_handle, hwparams,
                                       af_get_channels(alsa_af));
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_set_channels");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_set_channels");
+    return -1;
+  }
 
   unsigned int rate = af_get_rate(alsa_af);
   dir = 0;
   rc = snd_pcm_hw_params_set_rate_near(alsa_handle, hwparams, &rate, &dir);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params_set_rate_near");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_hw_params_set_rate_near");
+    return -1;
+  }
 
   rc = snd_pcm_hw_params(alsa_handle, hwparams);
-  if (rc < 0) mdie("Error: snd_pcm_hw_params");
+  if (rc < 0) {
+    log_error("Error:  snd_pcm_hw_params");
+    return -1;
+  }
 
   snd_pcm_hw_params_free(hwparams);
   return rc;
@@ -68,6 +97,10 @@ static int output_alsa_init() {
   snd_lib_error_set_handler(error_handler);
 
   rc = snd_pcm_status_malloc(&status);
+  if (rc < 0) {
+    log_error("Error: snd_pcm_status_malloc");
+    return -1;
+  }
 
   return rc;
 }
@@ -85,13 +118,22 @@ static int output_alsa_open(audio_format_t af) {
   alsa_frame_size = af_get_frame_size(af);
 
   rc = snd_pcm_open(&alsa_handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0);
-  if (rc < 0) mdie("Error: snd_pcm_open");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_open");
+    return -1;
+  }
 
   rc = alsa_set_hw_params();
-  if (rc < 0) mdie("Error: alsa_set_hw_params");
+  if (rc < 0) {
+    log_error("Error: alsa_set_hw_params");
+    return -1;
+  }
 
   rc = snd_pcm_prepare(alsa_handle);
-  if (rc < 0) mdie("Error: snd_pcm_prepare");
+  if (rc < 0) {
+    log_error("Error: snd_pcm_prepare");
+    return -1;
+  }
 
   return 0;
 }
@@ -100,12 +142,12 @@ static int output_alsa_close() {
   int rc;
 
   rc = snd_pcm_drain(alsa_handle);
-  mdebug("snd_pcm_drain: %d", rc);
+  log_ddebug("snd_pcm_drain: %d", rc);
 
   rc = snd_pcm_close(alsa_handle);
-  mdebug("snd_pcm_close: %d", rc);
+  log_ddebug("snd_pcm_close: %d", rc);
 
-  return rc;
+  return rc ? -1 : 0;
 }
 
 static int output_alsa_write(const uint8_t *buf, size_t len) {
@@ -115,7 +157,7 @@ static int output_alsa_write(const uint8_t *buf, size_t len) {
   frames = snd_pcm_writei(alsa_handle, buf, flen);
   if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
   if (frames < 0) {
-    mdebug("snd_pcm_writei failed: %s\n", snd_strerror(frames));
+    log_ddebug("snd_pcm_writei failed: %s\n", snd_strerror(frames));
     return -1;
   }
 
@@ -128,7 +170,7 @@ static int output_alsa_buffer_space() {
   frames = snd_pcm_avail_update(alsa_handle);
   if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
   if (frames < 0) {
-    mdebug("snd_pcm_avail_update failed: %s\n", snd_strerror(frames));
+    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(frames));
     return 0;
   }
 
@@ -147,13 +189,13 @@ static int output_alsa_pause() {
         snd_pcm_pause(alsa_handle, 1);
         break;
       default:
-        mdebug("error: state is not RUNNING or PREPARED");
+        log_ddebug("error: state is not RUNNING or PREPARED");
         break;
     }
 
     return 0;
   } else {
-    mdebug("snd_pcm_drop");
+    log_ddebug("snd_pcm_drop");
     return snd_pcm_drop(alsa_handle);
   }
 }
@@ -170,13 +212,13 @@ static int output_alsa_unpause() {
         snd_pcm_pause(alsa_handle, 0);
         break;
       default:
-        mdebug("error: state is not PAUSED or PREPARED");
+        log_ddebug("error: state is not PAUSED or PREPARED");
         break;
     }
 
     return 0;
   } else {
-    mdebug("snd_pcm_prepare");
+    log_ddebug("snd_pcm_prepare");
     return snd_pcm_prepare(alsa_handle);
   }
 }
