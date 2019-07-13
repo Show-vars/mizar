@@ -10,7 +10,7 @@
 #include "util.h"
 
 int main() {
-  log_init(MIZAR_LOGLEVEL_TRACE);
+  log_init(MIZAR_LOGLEVEL_DEBUG);
   log_write_direct("Mizar (version: %s)", VERSION);
 
   log_info("Server's pid is %lli", uv_os_getpid());

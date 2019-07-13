@@ -130,10 +130,8 @@ static void control_loop(void* arg) {
 
         double offset = *((double*)cmd.arg);
 
-        log_ddebug("[CONTROL ] EXEC COMMAND: S %f", offset);
         uv_mutex_lock(&state.producer_mutex);
         uv_mutex_lock(&state.consumer_mutex);
-        log_ddebug("[CONTROL ] EXEC COMMAND: YEAH %f", offset);
 
         state.decoder_ops.seek(&state.decoder_data, offset);
         output_device_ops.drop();
