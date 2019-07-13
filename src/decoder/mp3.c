@@ -63,7 +63,7 @@ long decoder_mp3_bitrate(decoder_data_t *data) {
 static const char *const mp3_ext[]  = { "mp3", "mp2", NULL };
 static const char *const mp3_mime[] = { "audio/mpeg", NULL };
 
-const struct decoder decoder_mp3 = {
+const decoder_ops_t decoder_mp3 = {
   .open = decoder_mp3_open,
   .close = decoder_mp3_close,
 
@@ -75,7 +75,7 @@ const struct decoder decoder_mp3 = {
   .bitrate_current = decoder_mp3_bitrate_current
 };
 
-const struct decoder_info decoder_mp3_info = {
+const decoder_info_t decoder_mp3_info = {
     .name = "mp3",
     .impl = "dr_mp3",
     .ext = mp3_ext,

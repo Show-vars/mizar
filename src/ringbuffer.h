@@ -2,13 +2,16 @@
 #define _H_RINGBUFFER_
 
 #include <stdint.h>
+#include <uv.h>
 
 typedef struct {
   size_t capacity;
 
-  size_t available;
-  size_t read_index;
-  size_t write_index;
+  volatile size_t available;
+  volatile size_t read_index;
+  volatile size_t write_index;
+
+  uv_mutex_t mutex;
 
   uint8_t data[];
 } ringbuffer_t;

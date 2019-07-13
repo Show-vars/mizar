@@ -1,46 +1,57 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include "log.h"
 
+struct {
+  unsigned maxlevel;
+} L;
+
 static const char *level_names[] = { "FATAL", "ERROR", "WARN", "INFO", "DEBUG", "TRACE" };
 
-void log_init(void) {
-  return;
-}
-
-void log_write(unsigned level, const char *fmt, ...) {
-  if(level >= sizeof(level_names)) return;
-
-  va_list argptr;
-  va_start(argptr, fmt);
-
-  log_writev(level, fmt, argptr);
-
-  va_end(argptr);
-}
-
-void log_writev(unsigned level, const char *fmt, va_list argptr) {
-  if(level >= sizeof(level_names)) return;
-  
+static void log_log(unsigned level, const char *prefix, const char *fmt, va_list arg) {
   time_t t = time(NULL);
   struct tm *lt = localtime(&t);
 
-  char buf[16];
-  buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
+  char buf[20];
+  buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
 
-  fprintf(stdout, "%s [%-5s]: ", buf, level_names[level]);
-  vfprintf(stdout, fmt, argptr);
+  fprintf(stdout, "%s [%-5s]", buf, level_names[level]);
+  if(strlen(prefix) > 0) fprintf(stdout, " [%s]", prefix);
+  fprintf(stdout, ": ");
+  vfprintf(stdout, fmt, arg);
   fprintf(stdout, "\n");
 }
 
-void log_write_direct(const char *fmt, ...) {
-  va_list argptr;
-  va_start(argptr, fmt);
+void log_init(unsigned maxlevel) {
+  L.maxlevel = maxlevel;
+}
 
-  vfprintf(stdout, fmt, argptr);
+void log_write(unsigned level, const char *prefix, const char *fmt, ...) {
+  if(level > L.maxlevel || level >= sizeof(level_names)) return;
+
+  va_list arg;
+  va_start(arg, fmt);
+
+  log_log(level, prefix, fmt, arg);
+
+  va_end(arg);
+}
+
+void log_writev(unsigned level, const char *prefix, const char *fmt, va_list arg) {
+  if(level > L.maxlevel || level >= sizeof(level_names)) return;
+  
+  log_log(level, prefix, fmt, arg);
+}
+
+void log_write_direct(const char *fmt, ...) {
+  va_list arg;
+  va_start(arg, fmt);
+
+  vfprintf(stdout, fmt, arg);
   fprintf(stdout, "\n");
 
-  va_end(argptr);
+  va_end(arg);
 }

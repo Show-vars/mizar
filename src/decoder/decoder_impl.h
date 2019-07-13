@@ -3,7 +3,7 @@
 
 #include "decoder/decoder.h"
 
-const struct decoder decoder_mp3;
-const struct decoder_info decoder_mp3_info;
+const decoder_ops_t decoder_mp3;
+const decoder_info_t decoder_mp3_info;
 
 #endif

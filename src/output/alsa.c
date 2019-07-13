@@ -22,7 +22,7 @@ static void error_handler(const char *file, int line, const char *function,
                           int err, const char *fmt, ...) {
   va_list argptr;
   va_start(argptr, fmt);
-  log_writev(MIZAR_LOGLEVEL_WARN, fmt, argptr);
+  log_writev(MIZAR_LOGLEVEL_WARN, "ALSA", fmt, argptr);
   va_end(argptr);
 }
 
@@ -150,6 +150,18 @@ static int output_alsa_close() {
   return rc ? -1 : 0;
 }
 
+static int output_alsa_drop() {
+	int rc;
+
+	rc = snd_pcm_drop(alsa_handle);
+  log_ddebug("snd_pcm_drop: %d", rc);
+
+	rc = snd_pcm_prepare(alsa_handle);
+  log_ddebug("snd_pcm_prepare: %d", rc);
+
+	return rc ? -1 : 0;
+}
+
 static int output_alsa_write(const uint8_t *buf, size_t len) {
   snd_pcm_sframes_t frames;
   int flen = len / alsa_frame_size;
@@ -157,7 +169,7 @@ static int output_alsa_write(const uint8_t *buf, size_t len) {
   frames = snd_pcm_writei(alsa_handle, buf, flen);
   if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
   if (frames < 0) {
-    log_ddebug("snd_pcm_writei failed: %s\n", snd_strerror(frames));
+    log_ddebug("snd_pcm_writei failed: %s", snd_strerror(frames));
     return -1;
   }
 
@@ -228,6 +240,7 @@ const struct output_device output_device_ops = {
     .destroy = output_alsa_destroy,
     .open = output_alsa_open,
     .close = output_alsa_close,
+    .drop = output_alsa_drop,
     .write = output_alsa_write,
     .buffer_space = output_alsa_buffer_space,
     .pause = output_alsa_pause,
