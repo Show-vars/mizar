@@ -6,7 +6,12 @@
 
 typedef struct {
   char type;
-  void* arg;
+  union {
+    int i;
+    float f;
+    double d;
+    void* ptr;
+  } arg;
 } command_t;
 
 typedef struct {

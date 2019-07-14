@@ -55,7 +55,7 @@ static void control_loop(void* arg) {
         if(controller_ready) break;
         log_ddebug("[CONTROL ] EXEC COMMAND: PLAYBACK_CMD_OPEN");
 
-        decoder_t* decoder = (decoder_t*) cmd.arg;
+        decoder_t* decoder = (decoder_t*) cmd.arg.ptr;
 
         uv_mutex_lock(&state.producer_mutex);
         decoder_set(&state.decoder_ops, &decoder->ops);
@@ -128,7 +128,7 @@ static void control_loop(void* arg) {
         if(!controller_ready) break;
         log_ddebug("[CONTROL ] EXEC COMMAND: PLAYBACK_CMD_SEEK");
 
-        double offset = *((double*)cmd.arg);
+        double offset = cmd.arg.d;
 
         uv_mutex_lock(&state.producer_mutex);
         uv_mutex_lock(&state.consumer_mutex);

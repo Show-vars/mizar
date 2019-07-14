@@ -23,11 +23,9 @@ int main() {
   decoder_t decoder = { {af, NULL}, decoder_mp3 };
   decoder.ops.open(&decoder.data);
 
-  double offset = 36;
-
-  command_t command_open = { PLAYBACK_CMD_OPEN, &decoder };
-  command_t command_start = { PLAYBACK_CMD_START, NULL };
-  command_t command_seek = { PLAYBACK_CMD_SEEK, &offset };
+  command_t command_open = { PLAYBACK_CMD_OPEN, {.ptr = &decoder} };
+  command_t command_start = { PLAYBACK_CMD_START, {.ptr = &decoder} };
+  command_t command_seek = { PLAYBACK_CMD_SEEK, {.d = 36} };
 
   playback_ctl(command_open);
   playback_ctl(command_start);
