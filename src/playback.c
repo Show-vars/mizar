@@ -203,7 +203,7 @@ static void producer_loop(void* arg) {
 
     if(w <= 0) {
       //Something gone wrong
-      msleep(500); //In any strange situation, go to sleep
+      msleep(50); //In any strange situation, go to sleep
     }
 
     log_dtrace("[PRODUCER] %d bytes written to buffer", w);
@@ -333,5 +333,35 @@ void playback_init() {
 int playback_ctl(command_t cmd) {
   log_ddebug("[CONTROL ] PUSH COMMAND %d", cmd.type);
 
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_open(decoder_t* decoder) {
+  command_t cmd = { PLAYBACK_CMD_OPEN, {.ptr = decoder} };
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_close() {
+  command_t cmd = { PLAYBACK_CMD_CLOSE };
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_start() {
+  command_t cmd = { PLAYBACK_CMD_START };
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_stop() {
+  command_t cmd = { PLAYBACK_CMD_STOP };
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_seek(double offset) {
+  command_t cmd = { PLAYBACK_CMD_SEEK, {.d = offset }};
+  return command_queue_push(state.cmdqueue, cmd);
+}
+
+int playback_shutdown() {
+  command_t cmd = { PLAYBACK_CMD_SHUTDOWN };
   return command_queue_push(state.cmdqueue, cmd);
 }

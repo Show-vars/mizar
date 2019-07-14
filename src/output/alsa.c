@@ -219,7 +219,7 @@ static int output_alsa_unpause() {
     switch (state) {
       case SND_PCM_STATE_PREPARED:
         break;
-      case SND_PCM_STATE_RUNNING:
+      case SND_PCM_STATE_PAUSED:
         snd_pcm_wait(alsa_handle, -1);
         snd_pcm_pause(alsa_handle, 0);
         break;

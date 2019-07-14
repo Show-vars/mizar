@@ -2,6 +2,7 @@
 #define _H_PLAYBACK_
 
 #include "commandqueue.h"
+#include "decoder/decoder.h"
 
 #define PLAYBACK_CMD_NOTHING  0
 #define PLAYBACK_CMD_OPEN     1
@@ -13,5 +14,11 @@
 
 void playback_init(void);
 int playback_ctl(command_t command);
+int playback_open(decoder_t* decoder);
+int playback_close();
+int playback_start();
+int playback_stop();
+int playback_seek(double offset);
+int playback_shutdown();
 
 #endif
