@@ -1,8 +1,8 @@
-#include <stdint.h>
-
 #ifndef _H_PCM_
 #define _H_PCM_
 
+#include <stdint.h>
+#include "util.h"
 /*
   Audio format pattern (32-bit unsigned):
     Bit    Size   Desc
@@ -15,6 +15,8 @@
 */
 
 typedef uint32_t audio_format_t;
+
+#define MAX_AUDIO_CHANNELS 2
 
 #define AF_ENDIAN_MASK    0x00000001
 #define AF_SIGNED_MASK    0x00000002
@@ -40,8 +42,38 @@ typedef uint32_t audio_format_t;
 #define af_rate(val)            ( ((val) << AF_RATE_SHIFT     ) & AF_RATE_MASK )
 #define af_channels(val)        ( ((val) << AF_CHANNELS_SHIFT ) & AF_CHANNELS_MASK )
 
-#define af_get_sample_size(af)    ( af_get_depth((af))       >> 3 )
-#define af_get_frame_size(af)	    ( af_get_sample_size((af)) * af_get_channels((af)) )
-#define af_get_second_size(af)    ( af_get_rate((af))        * af_get_frame_size((af)) )
+#define af_get_sample_size(af)  ( af_get_depth((af))       >> 3 )
+#define af_get_frame_size(af)   ( af_get_sample_size((af)) * af_get_channels((af)) )
+#define af_get_second_size(af)  ( af_get_rate((af))        * af_get_frame_size((af)) )
 
+typedef struct  {
+  uint8_t channels;
+  uint16_t sample_rate;
+  size_t frames;
+  float* data;
+} audio_data_t;
+
+typedef struct  {
+  audio_format_t af;
+  size_t frames;
+  size_t size;
+  uint8_t* data;
+} audio_io_data_t;
+
+static inline int16_t pcm_clamp_sample_int16(float sample) {
+  return clamp((int32_t)(sample * INT16_MAX), -INT16_MAX, INT16_MAX);
+}
+
+static inline int pcm_fti(audio_io_data_t dst, audio_data_t src) {
+  if(af_get_rate(dst.af) != src.sample_rate) return -1;
+  if(dst.frames != src.frames) return -2;
+
+  for(size_t fr = 0; fr < src.frames; fr++) {
+    for(size_t ch = 0; ch < src.channels; ch++) {
+      *((int16_t*)dst.data + fr*af_get_sample_size(dst.af) + ch) = pcm_clamp_sample_int16(*(src.data + fr + ch));
+    }
+  }
+
+  return 0;
+}
 #endif

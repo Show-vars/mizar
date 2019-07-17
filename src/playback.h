@@ -12,6 +12,12 @@
 #define PLAYBACK_CMD_SEEK     5
 #define PLAYBACK_CMD_SHUTDOWN 6
 
+typedef struct {
+  double time;
+  double rms;
+  double peak;
+} playback_realtime_data_t;
+
 void playback_init(void);
 int playback_ctl(command_t command);
 int playback_open(decoder_t* decoder);

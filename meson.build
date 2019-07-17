@@ -6,12 +6,11 @@ mizar_sources = [
   'src/log.c',
   'src/decoder/mp3.c',
   'src/output/alsa.c',
-  'src/ringbuffer.c',
+  'src/audiobuffer.c',
   'src/commandqueue.c',
   'src/extend.c',
   'src/playback.c',
   'src/main.c',
-  'src/util.c',
 ]
 
 inc = include_directories(

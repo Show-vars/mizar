@@ -2,8 +2,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <uv.h>
+#include <inttypes.h>
 #include "playback.h"
-#include "ringbuffer.h"
+#include "audiobuffer.h"
 #include "commandqueue.h"
 #include "extend.h"
 #include "output/output.h"
@@ -11,21 +12,27 @@
 #include "log.h"
 #include "util.h"
 
+#define PLAYBACK_OUTPUT_FRAMES 1024
+
+struct audio_data {
+  float data[PLAYBACK_OUTPUT_FRAMES][MAX_AUDIO_CHANNELS];
+};
+
 struct playback_state {
-  ringbuffer_t* buffer;
+  audiobuffer_t* buffer;
   command_queue_t* cmdqueue;
 
   decoder_ops_t decoder_ops;
   decoder_data_t decoder_data;
-
-  uv_mutex_t producer_mutex;
-  uv_mutex_t consumer_mutex;
 
   int producer_enabled;
   int consumer_enabled;
 
   int producer_ready;
   int consumer_ready;
+  
+  uv_mutex_t producer_mutex;
+  uv_mutex_t consumer_mutex;
 
   uv_cond_t producer_cond;
   uv_cond_t consumer_cond;
@@ -36,8 +43,19 @@ struct playback_state {
 };
 
 struct playback_state state;
+playback_realtime_data_t playback_realtime_data;
+
 audio_format_t af = af_endian(0) | af_signed(1) | af_depth(16) |
                       af_rate(44100) | af_channels(2);
+
+static void playback_push_realtime_data(playback_realtime_data_t* realtime_data) {
+
+}
+
+static void playback_calculate_rms_peak(double* rms, double* peak) {
+  
+
+}
 
 static void control_loop(void* arg) {
   log_ddebug("[CONTROL ] STARTING UP");
@@ -90,7 +108,7 @@ static void control_loop(void* arg) {
         output_device_ops.close();
         uv_mutex_unlock(&state.consumer_mutex);
 
-        ringbuffer_reset(state.buffer);
+        audiobuffer_reset(state.buffer);
         controller_ready = 0;
 
         break;
@@ -135,7 +153,8 @@ static void control_loop(void* arg) {
 
         state.decoder_ops.seek(&state.decoder_data, offset);
         output_device_ops.drop();
-        ringbuffer_reset(state.buffer);
+        audiobuffer_reset(state.buffer);
+        audiobuffer_set_time(state.buffer, offset);
         
         uv_mutex_unlock(&state.consumer_mutex);
         uv_mutex_unlock(&state.producer_mutex);
@@ -163,10 +182,14 @@ static void control_loop(void* arg) {
 static void producer_loop(void* arg) {
   log_ddebug("[PRODUCER] STARTING UP");
 
-  uint8_t buf[32 * 1024];
-  size_t r;
-  size_t w;
-  size_t space;
+  float buffer[MAX_AUDIO_CHANNELS * PLAYBACK_OUTPUT_FRAMES];
+  audio_data_t audio;
+  size_t r, w, space;
+
+  audio.channels = af_get_channels(af);
+  audio.sample_rate = af_get_rate(af);
+  audio.frames = PLAYBACK_OUTPUT_FRAMES;
+  audio.data = buffer;
 
   while(1) {
     uv_mutex_lock(&state.producer_mutex);
@@ -183,28 +206,30 @@ static void producer_loop(void* arg) {
 
     uv_mutex_unlock(&state.producer_mutex);
 
-    space = ringbuffer_get_space(state.buffer);
+    space = audiobuffer_get_space(state.buffer);
 
     if(space <= 0) {
-      msleep(50);
+      ms_sleep(50);
       continue;
     }
     
     uv_mutex_lock(&state.producer_mutex);
-    r = state.decoder_ops.read(&state.decoder_data, buf, min(sizeof(buf), space));
+    r = state.decoder_ops.read(&state.decoder_data, audio.data, min(space, PLAYBACK_OUTPUT_FRAMES));
     uv_mutex_unlock(&state.producer_mutex);
 
     if(r <= 0) {
-      msleep(50);
+      ms_sleep(50);
       continue;
     }
     
-    w = ringbuffer_write(state.buffer, buf, r);
+    w = audiobuffer_write(state.buffer, audio.data, r);
 
     if(w <= 0) {
-      //Something gone wrong
-      msleep(50); //In any strange situation, go to sleep
+      ms_sleep(50);
+      continue;
     }
+
+    audiobuffer_fill(state.buffer, w);
 
     log_dtrace("[PRODUCER] %d bytes written to buffer", w);
   }
@@ -213,12 +238,28 @@ static void producer_loop(void* arg) {
 static void consumer_loop(void* arg) {
   log_ddebug("[CONSUMER] STARTING UP");
 
-  uint8_t buf[32 * 1024];
-  size_t r;
-  size_t w;
-  size_t available;
-  size_t space;
+  float buffer[MAX_AUDIO_CHANNELS * PLAYBACK_OUTPUT_FRAMES];
+  uint8_t output_buffer[MAX_AUDIO_CHANNELS * PLAYBACK_OUTPUT_FRAMES];
+  
+  audio_data_t audio;
+  audio_io_data_t output_audio;
+  size_t r, w, available, space;
 
+  audio.channels = af_get_channels(af);
+  audio.sample_rate = af_get_rate(af);
+  audio.frames = PLAYBACK_OUTPUT_FRAMES;
+  audio.data = buffer;
+
+  output_audio.af = af;
+  output_audio.frames = PLAYBACK_OUTPUT_FRAMES;
+  output_audio.size = PLAYBACK_OUTPUT_FRAMES * af_get_frame_size(output_audio.af);
+  output_audio.data = output_buffer;
+
+
+  int audio_wait_time = (PLAYBACK_OUTPUT_FRAMES * 1e3 / 44100) * 1e6;
+  int delta;
+  
+  uint64_t last_time = uv_hrtime();
   while(1) {
     uv_mutex_lock(&state.consumer_mutex);
     if (!state.consumer_enabled) {
@@ -236,29 +277,39 @@ static void consumer_loop(void* arg) {
 
     space = output_device_ops.buffer_space();
 
-    if(space <= 0) {
-      msleep(10);
-      continue;
+    if(space < af_get_frame_size(af) * PLAYBACK_OUTPUT_FRAMES) {
+      goto consumer_end_sleep;
     }
     
-    available = ringbuffer_get_available(state.buffer);
+    available = audiobuffer_get_available(state.buffer);
 
-    if(available <= 0) {
-      msleep(10);
-      continue;
+    if(available < audio.frames) {
+      goto consumer_end_sleep;
     }
 
-    r = ringbuffer_read(state.buffer, buf, min(sizeof(buf), min(available, space)));
+    
+    r = audiobuffer_read(state.buffer, audio.data, audio.frames);
+
+    pcm_fti(output_audio, audio);
 
     uv_mutex_lock(&state.consumer_mutex);
-    w = output_device_ops.write(buf, r);
+    w = output_device_ops.write(output_audio.data, output_audio.frames);
     uv_mutex_unlock(&state.consumer_mutex);
 
-    if(w <= 0) {
-      msleep(50);
+    if(w > 0) {
+      audiobuffer_consume(state.buffer, output_audio.frames);
+      //log_dtrace("[CONSUMER] %d bytes written to output device", w);
     }
+
+    playback_realtime_data.time = audiobuffer_get_time(state.buffer);
+    playback_push_realtime_data(&playback_realtime_data);
+
+    consumer_end_sleep:    
     
-    log_dtrace("[CONSUMER] %d bytes written to output device", w);
+    delta = uv_hrtime() - last_time;
+    ns_sleep(audio_wait_time - delta);
+
+    last_time = uv_hrtime();
   }
 
   uv_mutex_lock(&state.consumer_mutex);
@@ -268,7 +319,7 @@ static void consumer_loop(void* arg) {
 }
 
 void playback_init() {
-  state.buffer = ringbuffer_create(512 * 1024);
+  state.buffer = audiobuffer_create(af, PLAYBACK_OUTPUT_FRAMES * 4);
   state.cmdqueue = command_queue_create(10);
   state.producer_ready = state.consumer_ready = 0;
   state.producer_enabled = state.consumer_enabled = 1;

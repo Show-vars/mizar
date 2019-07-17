@@ -164,7 +164,8 @@ static int output_alsa_drop() {
 
 static int output_alsa_write(const uint8_t *buf, size_t len) {
   snd_pcm_sframes_t frames;
-  int flen = len / alsa_frame_size;
+  int flen = len;
+    log_ddebug("snd_pcm_writei: %d", flen);
 
   frames = snd_pcm_writei(alsa_handle, buf, flen);
   if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
@@ -173,7 +174,7 @@ static int output_alsa_write(const uint8_t *buf, size_t len) {
     return -1;
   }
 
-  return frames * alsa_frame_size;
+  return frames;
 }
 
 static int output_alsa_buffer_space() {
@@ -186,7 +187,7 @@ static int output_alsa_buffer_space() {
     return 0;
   }
 
-  return frames * alsa_frame_size;
+  return frames;
 }
 
 static int output_alsa_pause() {

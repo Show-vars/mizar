@@ -23,7 +23,7 @@ typedef struct {
   int (*open)(decoder_data_t *data);
   int (*close)(decoder_data_t *data);
 
-  int (*read)(decoder_data_t *data, uint8_t *buffer, size_t count);
+  int (*read)(decoder_data_t *data, float *buffer, size_t count);
   int (*seek)(decoder_data_t *data, double offset);
 
   double (*duration)(decoder_data_t *data);

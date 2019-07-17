@@ -12,7 +12,7 @@ int decoder_mp3_open(decoder_data_t *data) {
   drmp3 *mp3 = mmalloc(sizeof(drmp3));
   data->priv = mp3;
 
-  int r = drmp3_init_file(mp3, "test.mp3", NULL);
+  int r = drmp3_init_file(mp3, "test3.mp3", NULL);
 
   return r;
 }
@@ -26,12 +26,12 @@ int decoder_mp3_close(decoder_data_t *data) {
   return 0;
 }
 
-int decoder_mp3_read(decoder_data_t *data, uint8_t *buffer, size_t count) {
+int decoder_mp3_read(decoder_data_t *data, float *buffer, size_t count) {
   drmp3 *mp3 = data->priv;
 
-  long frames = drmp3_read_pcm_frames_s16(mp3, count / af_get_frame_size(data->af), (drmp3_int16*) buffer);
+  long frames = drmp3_read_pcm_frames_f32(mp3, count, buffer);
 
-  return frames * af_get_frame_size(data->af);
+  return frames;
 }
 
 int decoder_mp3_seek(decoder_data_t *data, double offset) {
