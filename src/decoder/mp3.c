@@ -10,9 +10,10 @@
 
 int decoder_mp3_open(decoder_data_t *data) {
   drmp3 *mp3 = mmalloc(sizeof(drmp3));
+  data->af = af_endian(0) | af_format(SF_FORMAT_S16) | af_rate(44100) | af_channels(2);
   data->priv = mp3;
 
-  int r = drmp3_init_file(mp3, "test.mp3", NULL);
+  int r = drmp3_init_file(mp3, "test6.mp3", NULL);
 
   return r;
 }
@@ -26,23 +27,23 @@ int decoder_mp3_close(decoder_data_t *data) {
   return 0;
 }
 
-int decoder_mp3_read(decoder_data_t *data, uint8_t *buffer, size_t count) {
+size_t decoder_mp3_read_s16(decoder_data_t *data, uint8_t *buffer, size_t frames) {
   drmp3 *mp3 = data->priv;
 
-  long frames = drmp3_read_pcm_frames_s16(mp3, count / af_get_frame_size(data->af), (drmp3_int16*) buffer);
+  size_t mp3_frames = drmp3_read_pcm_frames_s16(mp3, frames, (drmp3_int16*) buffer);
 
-  return frames * af_get_frame_size(data->af);
+  return mp3_frames;
 }
 
-int decoder_mp3_seek(decoder_data_t *data, double offset) {
+int decoder_mp3_seek(decoder_data_t *data, long offset) {
   drmp3 *mp3 = data->priv;
 
-  int r = drmp3_seek_to_pcm_frame(mp3, af_get_rate(data->af) * offset);
+  int r = drmp3_seek_to_pcm_frame(mp3, af_get_rate(data->af) * offset / 1000);
 
   return r;
 }
 
-double decoder_mp3_duration(decoder_data_t *data) {
+long decoder_mp3_duration(decoder_data_t *data) {
   drmp3 *mp3 = data->priv;
 
   long frames = drmp3_get_pcm_frame_count(mp3) / af_get_rate(data->af);
@@ -67,7 +68,7 @@ const decoder_ops_t decoder_mp3 = {
   .open = decoder_mp3_open,
   .close = decoder_mp3_close,
 
-  .read = decoder_mp3_read,
+  .read_s16 = decoder_mp3_read_s16,
   .seek = decoder_mp3_seek,
 
   .duration = decoder_mp3_duration,

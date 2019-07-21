@@ -9,6 +9,7 @@ typedef struct {
   union {
     int i;
     float f;
+    long l;
     double d;
     void* ptr;
   } arg;

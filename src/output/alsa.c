@@ -3,7 +3,7 @@
 #include <stdarg.h>
 #include "output.h"
 #include "pcm.h"
-#include "log.h"
+#include "logging.h"
 #include "util.h"
 
 #define ALSA_BUFFER_TIME_MAX 300 * 1000;  // 300 ms
@@ -162,31 +162,30 @@ static int output_alsa_drop() {
 	return rc ? -1 : 0;
 }
 
-static int output_alsa_write(const uint8_t *buf, size_t len) {
-  snd_pcm_sframes_t frames;
-  int flen = len / alsa_frame_size;
+static size_t output_alsa_write(const uint8_t *buf, size_t frames) {
+  snd_pcm_sframes_t alsa_frames;
 
-  frames = snd_pcm_writei(alsa_handle, buf, flen);
-  if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
-  if (frames < 0) {
-    log_ddebug("snd_pcm_writei failed: %s", snd_strerror(frames));
+  alsa_frames = snd_pcm_writei(alsa_handle, buf, frames);
+  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
+  if (alsa_frames < 0) {
+    log_ddebug("snd_pcm_writei failed: %s", snd_strerror(alsa_frames));
     return -1;
   }
 
-  return frames * alsa_frame_size;
+  return alsa_frames;
 }
 
-static int output_alsa_buffer_space() {
-  snd_pcm_sframes_t frames;
+static size_t output_alsa_buffer_space() {
+  snd_pcm_sframes_t alsa_frames;
 
-  frames = snd_pcm_avail_update(alsa_handle);
-  if (frames < 0) frames = snd_pcm_recover(alsa_handle, frames, 0);
-  if (frames < 0) {
-    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(frames));
+  alsa_frames = snd_pcm_avail_update(alsa_handle);
+  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
+  if (alsa_frames < 0) {
+    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(alsa_frames));
     return 0;
   }
 
-  return frames * alsa_frame_size;
+  return alsa_frames;
 }
 
 static int output_alsa_pause() {

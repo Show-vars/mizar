@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "log.h"
+#include "logging.h"
 
 struct {
   unsigned maxlevel;

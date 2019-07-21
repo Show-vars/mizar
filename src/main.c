@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <uv.h>
 
-#include "log.h"
+#include "logging.h"
 #include "playback.h"
 #include "commandqueue.h"
 #include "decoder/decoder_impl.h"
 #include "pcm.h"
 #include "util.h"
+#include "util_int128.h"
 
 int main() {
   log_init(MIZAR_LOGLEVEL_DEBUG);
@@ -15,26 +16,17 @@ int main() {
 
   log_info("Server's pid is %lli", uv_os_getpid());
 
-  playback_init();
-
-  audio_format_t af = af_endian(0) | af_signed(1) | af_depth(16) |
-                      af_rate(44100) | af_channels(2);
-
-  decoder_t decoder = { {af, NULL}, decoder_mp3 };
+  decoder_t decoder = {{0, NULL}, decoder_mp3};
   decoder.ops.open(&decoder.data);
 
-  command_t command_open = { PLAYBACK_CMD_OPEN, {.ptr = &decoder} };
-  command_t command_start = { PLAYBACK_CMD_START, {.ptr = &decoder} };
-  command_t command_seek = { PLAYBACK_CMD_SEEK, {.d = 36} };
-
-  playback_ctl(command_open);
-  playback_ctl(command_start);
-
-  msleep(3 * 1000);
+  playback_init();
   
-  playback_ctl(command_seek);
-
-  msleep(200 * 1000);
-
+  playback_open(&decoder);
+  sec_sleep(1);
+  playback_start();
+  sec_sleep(1);
+  playback_seek(35 * 1000);
+  sec_sleep(200);
+  
   return 0;
 }

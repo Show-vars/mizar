@@ -10,8 +10,8 @@ struct output_device {
 	int (*open)(audio_format_t af);
 	int (*close)(void);
 	int (*drop)(void);
-	int (*write)(const uint8_t *buf, size_t len);
-	int (*buffer_space)(void);
+	size_t (*write)(const uint8_t *buf, size_t frames);
+	size_t (*buffer_space)(void);
 	int (*pause)(void);
 	int (*unpause)(void);
 };
