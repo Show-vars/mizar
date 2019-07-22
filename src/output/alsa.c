@@ -117,7 +117,7 @@ static int output_alsa_open(audio_format_t af) {
   alsa_af = af;
   alsa_frame_size = af_get_frame_size(af);
 
-  rc = snd_pcm_open(&alsa_handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0);
+  rc = snd_pcm_open(&alsa_handle, alsa_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
   if (rc < 0) {
     log_error("Error: snd_pcm_open");
     return -1;
@@ -132,6 +132,12 @@ static int output_alsa_open(audio_format_t af) {
   rc = snd_pcm_prepare(alsa_handle);
   if (rc < 0) {
     log_error("Error: snd_pcm_prepare");
+    return -1;
+  }
+
+  rc = snd_pcm_nonblock(alsa_handle, 1);
+  if (rc < 0) {
+    log_error("Error: snd_pcm_nonblock");
     return -1;
   }
 
@@ -169,7 +175,7 @@ static size_t output_alsa_write(const uint8_t *buf, size_t frames) {
   if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
   if (alsa_frames < 0) {
     log_ddebug("snd_pcm_writei failed: %s", snd_strerror(alsa_frames));
-    return -1;
+    return 0;
   }
 
   return alsa_frames;
