@@ -14,10 +14,10 @@
 #include "logging.h"
 #include "util.h"
 
-#define PLAYBACK_INPUT_FRAMES 8192
-#define PLAYBACK_OUTPUT_FRAMES 2048
-#define PLAYBACK_PPS_MAX_SAMPLES 100
-#define PLAYBACK_REALTIME_PUSH_FACTOR 4
+#define PLAYBACK_INPUT_FRAMES 1024 * 8
+#define PLAYBACK_OUTPUT_FRAMES 1024
+#define PLAYBACK_PPS_MAX_SAMPLES 10
+#define PLAYBACK_REALTIME_PUSH_FACTOR 12
 
 struct playback_state {
   audiobuffer_t* buffer;
@@ -49,7 +49,7 @@ audio_format_t output_af = af_endian(0) | af_format(SF_FORMAT_S16) | af_rate(441
 
 int tickindex = 0;
 double ticksum = 0;
-int ticklist[PLAYBACK_PPS_MAX_SAMPLES];
+uint64_t ticklist[PLAYBACK_PPS_MAX_SAMPLES];
 int realtime_push_count = 0;
 
 playback_realtime_data_t playback_realtime_data;
@@ -59,7 +59,7 @@ static void playback_calculate_time(uint64_t frames) {
 }
 
 static void playback_calculate_pps(uint64_t delta) {
-  int newtick = 1e9 / delta;
+  uint64_t newtick = 1e9 / delta;
 
   ticksum = ticksum - ticklist[tickindex] + newtick;
   ticklist[tickindex] = newtick;
@@ -68,19 +68,24 @@ static void playback_calculate_pps(uint64_t delta) {
   playback_realtime_data.pps = (ticksum / PLAYBACK_PPS_MAX_SAMPLES);
 }
 
-float peak_last = 0;
+float peak_last[MAX_AUDIO_CHANNELS][4];
 
 static void playback_calculate_peak(float* buffer, size_t frames) {
   int channels = af_get_channels(internal_af);
 
-  for(int ch = 0; ch < channels; ch++) {
-    float peak = peak_last;
+  for(int ch = 0; ch < channels && ch < MAX_AUDIO_CHANNELS; ch++) {
+    float peak = max(peak_last[ch][0], max(peak_last[ch][1], max(peak_last[ch][2], peak_last[ch][3])));
     for(size_t i = 0; i < frames; i++) {
       float sample = buffer[i * channels + ch];
       peak = fmaxf(peak, fabsf(sample));
     }
 
-    playback_realtime_data.peak[ch] = pcm_to_db(peak_last = peak);
+    peak_last[ch][0] = buffer[(frames-4) * channels + ch];
+    peak_last[ch][1] = buffer[(frames-3) * channels + ch];
+    peak_last[ch][2] = buffer[(frames-2) * channels + ch];
+    peak_last[ch][3] = buffer[(frames-1) * channels + ch];
+    
+    playback_realtime_data.peak[ch] = pcm_to_db(peak);
   }
 }
 
@@ -252,7 +257,7 @@ static void producer_loop(void* arg) {
     space = audiobuffer_get_space(state.buffer);
 
     if(space <= 0) {
-      ms_sleep(50);
+      ms_sleep(20);
       continue;
     }
 
@@ -263,7 +268,7 @@ static void producer_loop(void* arg) {
     uv_mutex_unlock(&state.producer_mutex);
 
     if(r <= 0) {
-      ms_sleep(50);
+      ms_sleep(20);
       continue;
     }
 
@@ -275,8 +280,6 @@ static void producer_loop(void* arg) {
       audiobuffer_fill(state.buffer, w);
       log_dtrace("[PRODUCER] %d frames written to buffer", w);
     }
-
-    ms_sleep(50);
   }
 }
 
@@ -309,20 +312,19 @@ static void consumer_loop(void* arg) {
 
     space = output_device_ops.buffer_space();
 
-    if(space < PLAYBACK_OUTPUT_FRAMES) {
+    if(space <= 0) {
       goto consumer_end_sleep;
     }
     
     available = audiobuffer_get_available(state.buffer);
-
-    if(available < PLAYBACK_OUTPUT_FRAMES) {
+    if(available <= 0) {
       goto consumer_end_sleep;
     }
 
-    r = audiobuffer_read(state.buffer, internal_buf, PLAYBACK_OUTPUT_FRAMES);
+    r = audiobuffer_read(state.buffer, internal_buf, min(PLAYBACK_OUTPUT_FRAMES, min(space, available)));
 
     r = pcm_float_to_fixed(output_af, output_buf, internal_buf, r);
-
+   
     uv_mutex_lock(&state.consumer_mutex);
     w = output_device_ops.write(output_buf, r);
     uv_mutex_unlock(&state.consumer_mutex);
@@ -331,11 +333,12 @@ static void consumer_loop(void* arg) {
       audiobuffer_consume(state.buffer, w);
       log_dtrace("[CONSUMER] %d frames written to the output device", w);
     }
-    
-    consumer_end_sleep:    
-    
-    delta = uv_hrtime() - last_time;
+
+    consumer_end_sleep:
+
+    delta = uv_hrtime() - last_time;    
     ns_sleep(audio_wait_time - delta);
+    delta = uv_hrtime() - last_time;  
     last_time = uv_hrtime();
 
     playback_calculate_pps(delta);
@@ -356,8 +359,8 @@ static void consumer_loop(void* arg) {
 }
 
 void playback_init() {
-  state.buffer = audiobuffer_create(output_af, PLAYBACK_OUTPUT_FRAMES*4);
-  state.cmdqueue = command_queue_create(10);
+  state.buffer = audiobuffer_create(output_af, PLAYBACK_INPUT_FRAMES);
+  state.cmdqueue = command_queue_create(8);
   state.producer_ready = state.consumer_ready = 0;
   state.producer_enabled = state.consumer_enabled = 1;
 
