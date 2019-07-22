@@ -88,7 +88,7 @@ size_t audiobuffer_read(audiobuffer_t* b, float* dst, const size_t frames) {
   
   uv_mutex_unlock(&b->mutex);
 
-  if (available < samples) return 0;
+  if (available <= 0) return 0;
 
   size_t limit, count, count_end;
 
