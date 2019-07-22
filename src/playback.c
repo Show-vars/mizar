@@ -234,10 +234,9 @@ static void producer_loop(void* arg) {
   log_ddebug("[PRODUCER] STARTING UP");
 
   uint8_t buf[PLAYBACK_INPUT_FRAMES * 2 * 2];
-  float internal_buf[PLAYBACK_INPUT_FRAMES * 2];
-  size_t r;
-  size_t w;
-  size_t space;
+  //float internal_buf[PLAYBACK_INPUT_FRAMES * 2];
+  size_t r, w, space;
+  float* ptr;
 
   while(1) {
     uv_mutex_lock(&state.producer_mutex);
@@ -254,32 +253,25 @@ static void producer_loop(void* arg) {
 
     uv_mutex_unlock(&state.producer_mutex);
 
-    space = audiobuffer_get_space(state.buffer);
+    space = audiobuffer_write_begin(state.buffer, PLAYBACK_INPUT_FRAMES);
+    if(space > 0) {
+      uv_mutex_lock(&state.producer_mutex);
+      while((r = audiobuffer_write(state.buffer, &ptr)) > 0) {
+        r = state.decoder_ops.read_s16(&state.decoder_data, buf, r);
 
-    if(space <= 0) {
-      ms_sleep(20);
-      continue;
+        pcm_fixed_to_float(state.decoder_data.af, ptr, buf, r);
+
+        w = audiobuffer_write_fill(state.buffer, r);
+      }
+      uv_mutex_unlock(&state.producer_mutex);
     }
-
-    log_dtrace("[PRODUCER] %d space frames available in buffer", space);
-    
-    uv_mutex_lock(&state.producer_mutex);
-    r = state.decoder_ops.read_s16(&state.decoder_data, buf, min(PLAYBACK_INPUT_FRAMES, space));
-    uv_mutex_unlock(&state.producer_mutex);
-
-    if(r <= 0) {
-      ms_sleep(20);
-      continue;
-    }
-
-    r = pcm_fixed_to_float(state.decoder_data.af, internal_buf, buf, r);
-    
-    w = audiobuffer_write(state.buffer, internal_buf, r);
+    w = audiobuffer_write_end(state.buffer);
 
     if(w > 0) {
-      audiobuffer_fill(state.buffer, w);
       log_dtrace("[PRODUCER] %d frames written to buffer", w);
     }
+
+    ms_sleep(10);
   }
 }
 
@@ -287,8 +279,9 @@ static void consumer_loop(void* arg) {
   log_ddebug("[CONSUMER] STARTING UP");
 
   uint8_t output_buf[PLAYBACK_OUTPUT_FRAMES * 4];
-  float internal_buf[PLAYBACK_OUTPUT_FRAMES * 2];
+  //float internal_buf[PLAYBACK_OUTPUT_FRAMES * 2];
   size_t r, w, available, space;
+  float *ptr;
 
   uint64_t audio_wait_time = pcm_frames_to_ns(af_get_rate(internal_af), PLAYBACK_OUTPUT_FRAMES / 2);
   uint64_t delta = 1;
@@ -316,24 +309,26 @@ static void consumer_loop(void* arg) {
       goto consumer_end_sleep;
     }
     
-    available = audiobuffer_get_available(state.buffer);
-    if(available <= 0) {
-      goto consumer_end_sleep;
+    available = audiobuffer_read_begin(state.buffer, min(PLAYBACK_OUTPUT_FRAMES, space));
+    if(available > 0) {
+      uv_mutex_lock(&state.consumer_mutex);
+      while((r = audiobuffer_read(state.buffer, &ptr)) > 0) {
+        pcm_float_to_fixed(output_af, output_buf, ptr, r);
+
+        playback_calculate_peak(ptr, r);
+        playback_calculate_rms(ptr, r);
+
+        r = output_device_ops.write(output_buf, r);
+        w = audiobuffer_read_consume(state.buffer, r);
+      }
+      uv_mutex_unlock(&state.consumer_mutex);
     }
-
-    r = audiobuffer_read(state.buffer, internal_buf, min(PLAYBACK_OUTPUT_FRAMES, min(space, available)));
-
-    r = pcm_float_to_fixed(output_af, output_buf, internal_buf, r);
-   
-    uv_mutex_lock(&state.consumer_mutex);
-    w = output_device_ops.write(output_buf, r);
-    uv_mutex_unlock(&state.consumer_mutex);
+    w = audiobuffer_read_end(state.buffer);
 
     if(w > 0) {
-      audiobuffer_consume(state.buffer, w);
       log_dtrace("[CONSUMER] %d frames written to the output device", w);
     }
-
+    
     consumer_end_sleep:
 
     delta = uv_hrtime() - last_time;    
@@ -343,8 +338,6 @@ static void consumer_loop(void* arg) {
 
     playback_calculate_pps(delta);
     playback_calculate_time(audiobuffer_get_frames(state.buffer));
-    playback_calculate_peak(internal_buf, w);
-    playback_calculate_rms(internal_buf, w);
 
     if(++realtime_push_count >= PLAYBACK_REALTIME_PUSH_FACTOR) {
       realtime_push_count = 0;

@@ -36,28 +36,6 @@ void audiobuffer_reset(audiobuffer_t* b) {
   uv_mutex_unlock(&b->mutex);
 }
 
-size_t audiobuffer_get_available(audiobuffer_t* b) {
-  size_t r, channels;
-
-  uv_mutex_lock(&b->mutex);
-  channels = af_get_channels(b->af);
-  r = b->available;
-  uv_mutex_unlock(&b->mutex);
-
-  return r / channels;
-}
-
-size_t audiobuffer_get_space(audiobuffer_t* b) {
-  size_t r, channels;
-  
-  uv_mutex_lock(&b->mutex);
-  channels = af_get_channels(b->af);
-  r = b->capacity - b->available;
-  uv_mutex_unlock(&b->mutex);
-
-  return r / channels;
-}
-
 uint64_t audiobuffer_get_frames(audiobuffer_t* b) {
   uint64_t frames;
   
@@ -74,103 +52,140 @@ void audiobuffer_set_frames(audiobuffer_t* b, uint64_t frames) {
   uv_mutex_unlock(&b->mutex);
 }
 
-size_t audiobuffer_read(audiobuffer_t* b, float* dst, const size_t frames) {
-  if (frames <= 0) return 0;
-
-  uv_mutex_lock(&b->mutex);
+size_t audiobuffer_read_begin(audiobuffer_t* b, const size_t max_frames) {
+  if(b->r_begin || max_frames == 0) return 0;
 
   size_t channels = af_get_channels(b->af);
-  size_t samples = frames * channels;
-  size_t read_index = b->read_index;
-  size_t available = b->available;
-  size_t capacity = b->capacity;
+  size_t max_samples = max_frames * channels;
+
+  b->r_begin = 1;
+  b->r_max_samples = max_samples;
+  b->r_index = b->read_index;
+  b->r_count = 0;
+
+  uv_mutex_lock(&b->mutex);
+    b->r_available = b->available;
+  uv_mutex_unlock(&b->mutex);
+
+  b->r_available = min(b->r_available, max_samples);
+
+  return b->r_available / channels;
+}
+
+size_t audiobuffer_read(audiobuffer_t* b, float** ptr) {
+  if(!b->r_begin) return 0;
+
+  size_t channels = af_get_channels(b->af);
+  size_t samples = b->r_max_samples - b->r_count;
   float* src = b->data;
+
+  if (b->r_available == 0) return 0;
+
+  size_t limit = min(b->r_index + b->r_available, b->capacity);
+  size_t count = min(limit - b->r_index, samples);
   
-  uv_mutex_unlock(&b->mutex);
-
-  if (available <= 0) return 0;
-
-  size_t limit, count, count_end;
-
-  limit = min(read_index + available, capacity);
-  count = min(limit - read_index, samples);
-
-  memcpy(dst, src + read_index, count * sizeof(float));
-
-  read_index += count;
-
-  if (read_index >= capacity) {
-    count_end = min(samples - count, available - count);
-
-    if (count_end > 0) {
-      memcpy(dst + count, src, count_end * sizeof(float));
-
-      count += count_end;
-    }
-  }
+  *ptr = &src[b->r_index];
 
   return count / channels;
 }
 
-size_t audiobuffer_consume(audiobuffer_t* b, const size_t frames) {
-  uv_mutex_lock(&b->mutex);
-
-  size_t samples = frames * af_get_channels(b->af);
-
-  b->read_index = (b->read_index + samples) % b->capacity;
-  b->available -= samples;
-  b->frames += frames;
-
-  uv_mutex_unlock(&b->mutex);
-
-  return frames;
-}
-
-size_t audiobuffer_write(audiobuffer_t* b, float* src, const size_t frames) {
-  if (frames <= 0) return 0;
-
-  uv_mutex_lock(&b->mutex);
+size_t audiobuffer_read_consume(audiobuffer_t* b, const size_t frames) {
+  if(!b->r_begin) return 0;
 
   size_t channels = af_get_channels(b->af);
   size_t samples = frames * channels;
-  size_t write_index = b->write_index;
-  size_t available = b->available;
-  size_t capacity = b->capacity;
-  float* dst = b->data;
-  
+
+  b->r_available = b->r_available - samples;
+  b->r_index = (b->r_index + samples) % b->capacity;
+  b->r_count = b->r_count + samples;
+
+  return b->r_count / channels;
+}
+
+size_t audiobuffer_read_end(audiobuffer_t* b) {
+  if(!b->r_begin) return 0;
+
+  b->r_begin = 0;
+
+  if(b->r_count == 0) return 0;
+
+  size_t channels = af_get_channels(b->af);
+
+  b->read_index = (b->read_index + b->r_count) % b->capacity;
+
+  uv_mutex_lock(&b->mutex);
+    b->available -= b->r_count;
+    b->frames += b->r_count / channels;
   uv_mutex_unlock(&b->mutex);
 
-  if (available >= capacity) return 0;
+  return b->r_count / channels;
+}
+size_t audiobuffer_write_begin(audiobuffer_t* b, const size_t max_frames) {
+  if(b->w_begin || max_frames == 0) return 0;
 
-  size_t limit, count, count_end;
-  limit = min(write_index + capacity - available, capacity);
-  count = min(limit - write_index, samples);
+  size_t channels = af_get_channels(b->af);
+  size_t max_samples = max_frames * channels;
+
+  b->w_begin = 1;
+  b->w_max_samples = max_samples;
+  b->w_index = b->write_index;
+  b->w_count = 0;
+
+  uv_mutex_lock(&b->mutex);
+    b->w_available = b->capacity - b->available;
+  uv_mutex_unlock(&b->mutex);
+
+  b->w_available = min(b->w_available, max_samples);
+
+  return b->w_available / channels;
+}
+
+size_t audiobuffer_write(audiobuffer_t* b, float** ptr) {
+  if(!b->w_begin) return 0;
   
-  memcpy(dst + write_index, src, count * sizeof(float));
+  size_t channels = af_get_channels(b->af);
+  size_t samples = b->w_max_samples - b->w_count;
+  float* dst = b->data;
 
-  write_index += count;
+  if (b->w_available == 0) return 0;
 
-  if (write_index == capacity) {
-    count_end = min(samples - count, capacity - available - count);
-
-    if (count_end > 0) {
-      memcpy(dst, src + count, count_end * sizeof(float));
-      count += count_end;
-    }
-  }
+  size_t limit = min(b->w_index + b->w_available, b->capacity);
+  size_t count = min(limit - b->w_index, samples);
+  
+  *ptr = &dst[b->w_index];
 
   return count / channels;
 }
 
-size_t audiobuffer_fill(audiobuffer_t* b, const size_t frames) {
+size_t audiobuffer_write_fill(audiobuffer_t* b, const size_t frames) {
+  if(!b->w_begin) return 0;
+
+  size_t channels = af_get_channels(b->af);
+  size_t samples = frames * channels;
+
+  b->w_available = b->w_available - samples;
+  b->w_index = (b->w_index + samples) % b->capacity;
+  b->w_count = b->w_count + samples;
+
+  return b->w_count / channels;
+}
+
+size_t audiobuffer_write_end(audiobuffer_t* b) {
+  if(!b->w_begin) return 0;
+
+  b->w_begin = 0;
+
+  if(b->w_count == 0) return 0;
+
+  size_t channels = af_get_channels(b->af);
+
+  b->write_index = (b->write_index + b->w_count) % b->capacity;
+
   uv_mutex_lock(&b->mutex);
-
-  size_t samples = frames * af_get_channels(b->af);
-
-  b->write_index = (b->write_index + samples) % b->capacity;
-  b->available += samples;
-
+    b->available += b->w_count;
   uv_mutex_unlock(&b->mutex);
+  
+  
 
-  return frames;
+  return b->w_count / channels;
 }
