@@ -7,10 +7,10 @@
 #include "pcm.h"
 #include "util.h"
 
-audiobuffer_t* audiobuffer_create(audio_format_t af, size_t frames) {
+audiobuffer_t* audiobuffer_create(audio_format_t af, uint32_t frames) {
   audiobuffer_t* b;
 
-  size_t capacity = frames * af_get_channels(af);
+  uint32_t capacity = frames * af_get_channels(af);
   b = mmalloc(offsetof(audiobuffer_t, data) + capacity * sizeof(float));
   
   b->af = af;
@@ -52,10 +52,10 @@ void audiobuffer_set_frames(audiobuffer_t* b, uint64_t frames) {
   uv_mutex_unlock(&b->mutex);
 }
 
-size_t audiobuffer_read_begin(audiobuffer_t* b, const size_t max_frames) {
+uint32_t audiobuffer_read_begin(audiobuffer_t* b, const uint32_t max_frames) {
   if(b->r_begin || max_frames == 0) return 0;
 
-  size_t channels = af_get_channels(b->af);
+  uint32_t channels = af_get_channels(b->af);
 
   b->r_begin = 1;
   b->r_max_samples = max_frames * channels;
@@ -71,28 +71,28 @@ size_t audiobuffer_read_begin(audiobuffer_t* b, const size_t max_frames) {
   return b->r_available / af_get_channels(b->af);
 }
 
-size_t audiobuffer_read(audiobuffer_t* b, float** ptr) {
+uint32_t audiobuffer_read(audiobuffer_t* b, float** ptr) {
   if(!b->r_begin) return 0;
 
-  size_t channels = af_get_channels(b->af);
-  size_t samples = b->r_max_samples - b->r_count;
+  uint32_t channels = af_get_channels(b->af);
+  uint32_t samples = b->r_max_samples - b->r_count;
   float* src = b->data;
 
   if (b->r_available == 0) return 0;
 
-  size_t limit = min(b->r_index + b->r_available, b->capacity);
-  size_t count = min(limit - b->r_index, samples);
+  uint32_t limit = min(b->r_index + b->r_available, b->capacity);
+  uint32_t count = min(limit - b->r_index, samples);
   
   *ptr = &src[b->r_index];
 
   return count / channels;
 }
 
-size_t audiobuffer_read_consume(audiobuffer_t* b, const size_t frames) {
+uint32_t audiobuffer_read_consume(audiobuffer_t* b, const uint32_t frames) {
   if(!b->r_begin) return 0;
 
-  size_t channels = af_get_channels(b->af);
-  size_t samples = frames * channels;
+  uint32_t channels = af_get_channels(b->af);
+  uint32_t samples = frames * channels;
 
   b->r_available = b->r_available - samples;
   b->r_index = (b->r_index + samples) % b->capacity;
@@ -101,14 +101,14 @@ size_t audiobuffer_read_consume(audiobuffer_t* b, const size_t frames) {
   return b->r_count / channels;
 }
 
-size_t audiobuffer_read_end(audiobuffer_t* b) {
+uint32_t audiobuffer_read_end(audiobuffer_t* b) {
   if(!b->r_begin) return 0;
 
   b->r_begin = 0;
 
   if(b->r_count == 0) return 0;
 
-  size_t channels = af_get_channels(b->af);
+  uint32_t channels = af_get_channels(b->af);
 
   b->read_index = (b->read_index + b->r_count) % b->capacity;
 
@@ -119,10 +119,10 @@ size_t audiobuffer_read_end(audiobuffer_t* b) {
 
   return b->r_count / channels;
 }
-size_t audiobuffer_write_begin(audiobuffer_t* b, const size_t max_frames) {
+uint32_t audiobuffer_write_begin(audiobuffer_t* b, const uint32_t max_frames) {
   if(b->w_begin || max_frames == 0) return 0;
 
-  size_t channels = af_get_channels(b->af);
+  uint32_t channels = af_get_channels(b->af);
 
   b->w_begin = 1;
   b->w_max_samples = max_frames * channels;
@@ -138,28 +138,28 @@ size_t audiobuffer_write_begin(audiobuffer_t* b, const size_t max_frames) {
   return b->w_available / channels;
 }
 
-size_t audiobuffer_write(audiobuffer_t* b, float** ptr) {
+uint32_t audiobuffer_write(audiobuffer_t* b, float** ptr) {
   if(!b->w_begin) return 0;
   
-  size_t channels = af_get_channels(b->af);
-  size_t samples = b->w_max_samples - b->w_count;
+  uint32_t channels = af_get_channels(b->af);
+  uint32_t samples = b->w_max_samples - b->w_count;
   float* dst = b->data;
 
   if (b->w_available == 0) return 0;
 
-  size_t limit = min(b->w_index + b->w_available, b->capacity);
-  size_t count = min(limit - b->w_index, samples);
+  uint32_t limit = min(b->w_index + b->w_available, b->capacity);
+  uint32_t count = min(limit - b->w_index, samples);
   
   *ptr = &dst[b->w_index];
 
   return count / channels;
 }
 
-size_t audiobuffer_write_fill(audiobuffer_t* b, const size_t frames) {
+uint32_t audiobuffer_write_fill(audiobuffer_t* b, const uint32_t frames) {
   if(!b->w_begin || frames == 0) return 0;
 
-  size_t channels = af_get_channels(b->af);
-  size_t samples = frames * channels;
+  uint32_t channels = af_get_channels(b->af);
+  uint32_t samples = frames * channels;
 
   b->w_available = b->w_available - samples;
   b->w_index = (b->w_index + samples) % b->capacity;
@@ -168,22 +168,20 @@ size_t audiobuffer_write_fill(audiobuffer_t* b, const size_t frames) {
   return b->w_count / channels;
 }
 
-size_t audiobuffer_write_end(audiobuffer_t* b) {
+uint32_t audiobuffer_write_end(audiobuffer_t* b) {
   if(!b->w_begin) return 0;
 
   b->w_begin = 0;
 
   if(b->w_count == 0) return 0;
 
-  size_t channels = af_get_channels(b->af);
+  uint32_t channels = af_get_channels(b->af);
 
   b->write_index = (b->write_index + b->w_count) % b->capacity;
 
   uv_mutex_lock(&b->mutex);
     b->available += b->w_count;
   uv_mutex_unlock(&b->mutex);
-  
-  
 
   return b->w_count / channels;
 }

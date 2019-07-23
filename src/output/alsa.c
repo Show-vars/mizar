@@ -6,7 +6,8 @@
 #include "logging.h"
 #include "util.h"
 
-#define ALSA_BUFFER_TIME_MAX 300 * 1000;  // 300 ms
+#define ALSA_BUFFER_TIME_MAX 500 * 1000;  // 300 ms
+#define ALSA_NON_BLOCKING_MODE 0
 
 static audio_format_t alsa_af;
 
@@ -49,6 +50,8 @@ static int alsa_set_hw_params() {
     return -1;
   }
 
+  log_write(MIZAR_LOGLEVEL_DEBUG, "ALSA", "Buffer time: %d us", buffer_time_max);
+
   alsa_can_pause = snd_pcm_hw_params_can_pause(hwparams);
 
   rc = snd_pcm_hw_params_set_access(alsa_handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED);
@@ -89,6 +92,19 @@ static int alsa_set_hw_params() {
 
   snd_pcm_hw_params_free(hwparams);
   return rc;
+}
+
+static size_t output_alsa_get_available() {
+  snd_pcm_sframes_t alsa_frames;
+
+  alsa_frames = snd_pcm_avail_update(alsa_handle);
+  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, ALSA_NON_BLOCKING_MODE ? SND_PCM_NONBLOCK : 0);
+  if (alsa_frames < 0) {
+    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(alsa_frames));
+    return 0;
+  }
+
+  return alsa_frames;
 }
 
 static int output_alsa_init() {
@@ -168,7 +184,7 @@ static int output_alsa_drop() {
 	return rc ? -1 : 0;
 }
 
-static size_t output_alsa_write(const uint8_t *buf, size_t frames) {
+static uint32_t output_alsa_write(const uint8_t *buf, uint32_t frames) {
   snd_pcm_sframes_t alsa_frames;
 
   alsa_frames = snd_pcm_writei(alsa_handle, buf, frames);
@@ -181,17 +197,14 @@ static size_t output_alsa_write(const uint8_t *buf, size_t frames) {
   return alsa_frames;
 }
 
-static size_t output_alsa_buffer_space() {
-  snd_pcm_sframes_t alsa_frames;
+static uint32_t output_alsa_wait() {
+  uint32_t frames = output_alsa_get_available();
+  if(frames > 0) return frames;
 
-  alsa_frames = snd_pcm_avail_update(alsa_handle);
-  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
-  if (alsa_frames < 0) {
-    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(alsa_frames));
-    return 0;
-  }
+  snd_pcm_sframes_t alsa_frames = snd_pcm_wait(alsa_handle, 1000);
+  if (alsa_frames < 0) return 0;
 
-  return alsa_frames;
+  return output_alsa_get_available();
 }
 
 static int output_alsa_pause() {
@@ -247,7 +260,7 @@ const struct output_device output_device_ops = {
     .close = output_alsa_close,
     .drop = output_alsa_drop,
     .write = output_alsa_write,
-    .buffer_space = output_alsa_buffer_space,
+    .wait = output_alsa_wait,
     .pause = output_alsa_pause,
     .unpause = output_alsa_unpause,
 };

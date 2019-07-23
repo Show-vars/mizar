@@ -14,7 +14,7 @@
 #include "logging.h"
 #include "util.h"
 
-#define PLAYBACK_BUFFER_FRAMES 1024 * 8
+#define PLAYBACK_BUFFER_FRAMES 1024 * 16
 #define PLAYBACK_IO_BUFFER_SAMPLES 1024
 #define PLAYBACK_PPS_MAX_SAMPLES 10
 #define PLAYBACK_REALTIME_PUSH_FACTOR 1
@@ -70,12 +70,12 @@ static void playback_calculate_pps(uint64_t delta) {
 
 float peak_last[MAX_AUDIO_CHANNELS][4];
 
-static void playback_calculate_peak(float* buffer, size_t frames) {
+static void playback_calculate_peak(float* buffer, uint32_t frames) {
   int channels = af_get_channels(internal_af);
 
   for(int ch = 0; ch < channels && ch < MAX_AUDIO_CHANNELS; ch++) {
     float peak = max(peak_last[ch][0], max(peak_last[ch][1], max(peak_last[ch][2], peak_last[ch][3])));
-    for(size_t i = 0; i < frames; i++) {
+    for(uint32_t i = 0; i < frames; i++) {
       float sample = buffer[i * channels + ch];
       peak = fmaxf(peak, fabsf(sample));
     }
@@ -89,13 +89,13 @@ static void playback_calculate_peak(float* buffer, size_t frames) {
   }
 }
 
-static void playback_calculate_rms(float* buffer, size_t frames) {
+static void playback_calculate_rms(float* buffer, uint32_t frames) {
   int channels = af_get_channels(internal_af);
 
   for(int ch = 0; ch < channels; ch++) {
     float sum = 0.0;
 
-    for(size_t i = 0; i < frames; i++) {
+    for(uint32_t i = 0; i < frames; i++) {
       float sample = buffer[i * channels + ch];
       sum += sample * sample;
     }
@@ -235,7 +235,7 @@ static void producer_loop(void* arg) {
 
   float* ptr;
   uint8_t input_buf[PLAYBACK_IO_BUFFER_SAMPLES];
-  size_t r, w, space;
+  uint32_t r, w, space;
 
   while(1) {
     uv_mutex_lock(&state.producer_mutex);
@@ -267,8 +267,8 @@ static void producer_loop(void* arg) {
     if(w > 0) {
       log_dtrace("[PRODUCER] %d frames written to buffer", w);
     }
-
-    ms_sleep(20);
+    
+    ms_sleep(100);
   }
 }
 
@@ -277,9 +277,9 @@ static void consumer_loop(void* arg) {
 
   float *ptr;
   uint8_t output_buf[PLAYBACK_IO_BUFFER_SAMPLES];
-  size_t r, w, available, space;
+  uint32_t r, w, available, space;
 
-  uint64_t audio_wait_time = pcm_frames_to_ns(af_get_rate(internal_af), PLAYBACK_BUFFER_FRAMES / 2);
+  uint64_t audio_wait_time = pcm_frames_to_ns(af_get_rate(internal_af), PLAYBACK_IO_BUFFER_SAMPLES * af_get_channels(output_af));
   uint64_t delta = 1;
   
   uint64_t last_time = uv_hrtime();
@@ -299,8 +299,7 @@ static void consumer_loop(void* arg) {
 
     uv_mutex_unlock(&state.consumer_mutex);
 
-    space = output_device_ops.buffer_space();
-
+    space = output_device_ops.wait();
     if(space <= 0) {
       goto consumer_end_sleep;
     }
