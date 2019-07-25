@@ -22,8 +22,7 @@ typedef struct {
   volatile size_t tail;
   volatile size_t size;
 
-  uv_mutex_t push_mutex;
-  uv_mutex_t poll_mutex;
+  uv_mutex_t mutex;
 
   uv_cond_t push_cond;
   uv_cond_t poll_cond;

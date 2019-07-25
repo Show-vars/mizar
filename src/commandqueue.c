@@ -10,8 +10,8 @@ command_queue_t* command_queue_create(const size_t capacity) {
   q->capacity = capacity;
   q->tail = q->head = q->size = 0;
 
-  uv_mutex_init_recursive(&q->push_mutex);
-  uv_mutex_init_recursive(&q->poll_mutex);
+  uv_mutex_init_recursive(&q->mutex);
+  //uv_mutex_init_recursive(&q->poll_mutex);
 
   uv_cond_init(&q->push_cond);
   uv_cond_init(&q->poll_cond);
@@ -20,10 +20,11 @@ command_queue_t* command_queue_create(const size_t capacity) {
 }
 
 int command_queue_push(command_queue_t* q, command_t command) {
-  uv_mutex_lock(&q->push_mutex);
-  while(q->size >= q->capacity) uv_cond_wait(&q->push_cond, &q->push_mutex);
+  uv_mutex_lock(&q->mutex);
+  if(q->size >= q->capacity) uv_cond_wait(&q->push_cond, &q->mutex);
+  
   q->size++;
-  uv_mutex_unlock(&q->push_mutex);
+  uv_mutex_unlock(&q->mutex);
 
   q->data[q->head] = command;
   q->head = (q->head + 1) % q->capacity;
@@ -34,10 +35,10 @@ int command_queue_push(command_queue_t* q, command_t command) {
 }
 
 int command_queue_poll(command_queue_t* q, command_t* dst) {
-  uv_mutex_lock(&q->poll_mutex);
-  while(q->size <= 0) uv_cond_wait(&q->poll_cond, &q->poll_mutex);
+  uv_mutex_lock(&q->mutex);
+  while(q->size <= 0) uv_cond_wait(&q->poll_cond, &q->mutex);
   q->size--;
-  uv_mutex_unlock(&q->poll_mutex);
+  uv_mutex_unlock(&q->mutex);
 
   command_t command = q->data[q->tail];
   q->tail = (q->tail + 1) % q->capacity;
