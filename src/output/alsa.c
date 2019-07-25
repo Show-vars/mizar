@@ -53,6 +53,8 @@ static int alsa_set_hw_params() {
   log_write(MIZAR_LOGLEVEL_DEBUG, "ALSA", "Buffer time: %d us", buffer_time_max);
 
   alsa_can_pause = snd_pcm_hw_params_can_pause(hwparams);
+  
+  log_write(MIZAR_LOGLEVEL_DEBUG, "ALSA", "Can pause: %s", alsa_can_pause ? "yes" : "no");
 
   rc = snd_pcm_hw_params_set_access(alsa_handle, hwparams, SND_PCM_ACCESS_RW_INTERLEAVED);
   if (rc < 0) {
@@ -100,7 +102,7 @@ static size_t output_alsa_get_available() {
   alsa_frames = snd_pcm_avail_update(alsa_handle);
   if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, ALSA_NON_BLOCKING_MODE ? SND_PCM_NONBLOCK : 0);
   if (alsa_frames < 0) {
-    log_ddebug("snd_pcm_avail_update failed: %s\n", snd_strerror(alsa_frames));
+    log_ddebug("snd_pcm_avail_update failed: %s", snd_strerror(alsa_frames));
     return 0;
   }
 
@@ -215,7 +217,6 @@ static int output_alsa_pause() {
       case SND_PCM_STATE_PREPARED:
         break;
       case SND_PCM_STATE_RUNNING:
-        snd_pcm_wait(alsa_handle, -1);
         snd_pcm_pause(alsa_handle, 1);
         break;
       default:
@@ -238,7 +239,6 @@ static int output_alsa_unpause() {
       case SND_PCM_STATE_PREPARED:
         break;
       case SND_PCM_STATE_PAUSED:
-        snd_pcm_wait(alsa_handle, -1);
         snd_pcm_pause(alsa_handle, 0);
         break;
       default:
