@@ -11,6 +11,8 @@ mizar_sources = [
   'src/pcm_conv.c',
   'src/commandqueue.c',
   'src/extend.c',
+  'src/osc.c',
+  'src/osc_ctrl.c',
   'src/playback.c',
   'src/main.c',
 ]

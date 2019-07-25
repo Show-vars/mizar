@@ -20,7 +20,7 @@
   #define clamp(val,minval,maxval) ((val > maxval) ? maxval : ((val < minval) ? minval : val))
 #endif
 
-
+// bytes swap
 #define BSWAP_16(x) ((((x) & 0x00FF) << 8) | \
                     (((x) & 0xFF00) >> 8))
 
@@ -32,6 +32,16 @@
                     (((x) & 0x0000FF00) << 8) | \
                     (((x) & 0x00FF0000) >> 8) | \
                     (((x) & 0xFF000000) >> 24))
+
+// convert big endian to native
+#ifdef WORDS_BIGENDIAN
+  #define BSWAP_BTON_16(x) (x)
+  #define BSWAP_BTON_32(x) (x)
+#else
+  #define BSWAP_BTON_16(x) BSWAP_16(x)
+  #define BSWAP_BTON_32(x) BSWAP_32(x)
+#endif
+
 
 static inline void* mmalloc(size_t size) {
   void* p;
