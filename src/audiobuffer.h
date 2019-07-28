@@ -2,11 +2,11 @@
 #define _H_AUDIOBUFFER_
 
 #include <stdint.h>
-#include <uv.h>
+#include <stdatomic.h>
 #include "pcm.h"
 
 /**
- * Audio ring buffer implementation.
+ * Audio ring buffer implementation. Thread safe for one producer and one consumer.
  * 
  * This buffer can only hold array of float values.
  */
@@ -16,14 +16,13 @@ typedef struct {
   size_t capacity;
   
   // last consume frame number
-  volatile uint64_t frames;
+  atomic_uint_least64_t	 frames;
 
   // all indexes and ofsets in pcm samples
-  volatile uint32_t available;
-  volatile uint32_t read_index;
-  volatile uint32_t write_index;
+  atomic_uint_least32_t available;
 
-  uv_mutex_t mutex;
+  uint32_t read_index;
+  uint32_t write_index;
 
   // read/write begin/end state
   uint8_t r_begin;

@@ -1,8 +1,8 @@
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <uv.h>
 #include "audiobuffer.h"
 #include "pcm.h"
 #include "util.h"
@@ -17,39 +17,26 @@ audiobuffer_t* audiobuffer_create(audio_format_t af, uint32_t frames) {
   b->capacity = capacity;
   b->frames = frames;
   b->available = b->read_index = b->write_index = 0;
-
-  uv_mutex_init_recursive(&b->mutex);
   
   return b;
 }
 
 void audiobuffer_destroy(audiobuffer_t* b) {
-  uv_mutex_destroy(&b->mutex);
-  
   free(b);
 }
 
 void audiobuffer_reset(audiobuffer_t* b) {
-  uv_mutex_lock(&b->mutex);
-  b->available = b->read_index = b->write_index = 0;
+  b->read_index = b->write_index = 0;
+  b->available = 0;
   b->frames = 0;
-  uv_mutex_unlock(&b->mutex);
 }
 
 uint64_t audiobuffer_get_frames(audiobuffer_t* b) {
-  uint64_t frames;
-  
-  uv_mutex_lock(&b->mutex);
-  frames = b->frames;
-  uv_mutex_unlock(&b->mutex);
-
-  return frames;
+  return b->frames;
 }
 
 void audiobuffer_set_frames(audiobuffer_t* b, uint64_t frames) {
-  uv_mutex_lock(&b->mutex);
   b->frames = frames;
-  uv_mutex_unlock(&b->mutex);
 }
 
 uint32_t audiobuffer_read_begin(audiobuffer_t* b, const uint32_t max_frames) {
@@ -62,10 +49,7 @@ uint32_t audiobuffer_read_begin(audiobuffer_t* b, const uint32_t max_frames) {
   b->r_index = b->read_index;
   b->r_count = 0;
 
-  uv_mutex_lock(&b->mutex);
-    b->r_available = b->available;
-  uv_mutex_unlock(&b->mutex);
-
+  b->r_available = b->available;
   b->r_available = min(b->r_available, b->r_max_samples);
 
   return b->r_available / af_get_channels(b->af);
@@ -111,11 +95,8 @@ uint32_t audiobuffer_read_end(audiobuffer_t* b) {
   uint32_t channels = af_get_channels(b->af);
 
   b->read_index = (b->read_index + b->r_count) % b->capacity;
-
-  uv_mutex_lock(&b->mutex);
-    b->available -= b->r_count;
-    b->frames += b->r_count / channels;
-  uv_mutex_unlock(&b->mutex);
+  b->available -= b->r_count;
+  b->frames += b->r_count / channels;
 
   return b->r_count / channels;
 }
@@ -129,10 +110,7 @@ uint32_t audiobuffer_write_begin(audiobuffer_t* b, const uint32_t max_frames) {
   b->w_index = b->write_index;
   b->w_count = 0;
 
-  uv_mutex_lock(&b->mutex);
-    b->w_available = b->capacity - b->available;
-  uv_mutex_unlock(&b->mutex);
-
+  b->w_available = b->capacity - b->available;
   b->w_available = min(b->w_available, b->w_max_samples);
 
   return b->w_available / channels;
@@ -178,10 +156,7 @@ uint32_t audiobuffer_write_end(audiobuffer_t* b) {
   uint32_t channels = af_get_channels(b->af);
 
   b->write_index = (b->write_index + b->w_count) % b->capacity;
-
-  uv_mutex_lock(&b->mutex);
-    b->available += b->w_count;
-  uv_mutex_unlock(&b->mutex);
+  b->available += b->w_count;
 
   return b->w_count / channels;
 }
