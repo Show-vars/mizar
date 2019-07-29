@@ -4,10 +4,8 @@
 #include "output.h"
 #include "pcm.h"
 #include "logging.h"
-#include "util.h"
 
 #define ALSA_BUFFER_TIME_MAX 500 * 1000;  // 300 ms
-#define ALSA_NON_BLOCKING_MODE 0
 
 static audio_format_t alsa_af;
 
@@ -96,19 +94,6 @@ static int alsa_set_hw_params() {
   return rc;
 }
 
-static size_t output_alsa_get_available() {
-  snd_pcm_sframes_t alsa_frames;
-
-  alsa_frames = snd_pcm_avail_update(alsa_handle);
-  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, ALSA_NON_BLOCKING_MODE ? SND_PCM_NONBLOCK : 0);
-  if (alsa_frames < 0) {
-    log_ddebug("snd_pcm_avail_update failed: %s", snd_strerror(alsa_frames));
-    return 0;
-  }
-
-  return alsa_frames;
-}
-
 static int output_alsa_init() {
   int rc;
 
@@ -135,7 +120,7 @@ static int output_alsa_open(audio_format_t af) {
   alsa_af = af;
   alsa_frame_size = af_get_frame_size(af);
 
-  rc = snd_pcm_open(&alsa_handle, alsa_device, SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
+  rc = snd_pcm_open(&alsa_handle, alsa_device, SND_PCM_STREAM_PLAYBACK, 0);
   if (rc < 0) {
     log_error("Error: snd_pcm_open");
     return -1;
@@ -193,6 +178,19 @@ static uint32_t output_alsa_write(const uint8_t *buf, uint32_t frames) {
   if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
   if (alsa_frames < 0) {
     log_ddebug("snd_pcm_writei failed: %s", snd_strerror(alsa_frames));
+    return 0;
+  }
+
+  return alsa_frames;
+}
+
+static size_t output_alsa_get_available() {
+  snd_pcm_sframes_t alsa_frames;
+
+  alsa_frames = snd_pcm_avail_update(alsa_handle);
+  if (alsa_frames < 0) alsa_frames = snd_pcm_recover(alsa_handle, alsa_frames, 0);
+  if (alsa_frames < 0) {
+    log_ddebug("snd_pcm_avail_update failed: %s", snd_strerror(alsa_frames));
     return 0;
   }
 

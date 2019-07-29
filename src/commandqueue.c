@@ -1,6 +1,6 @@
 #include <stddef.h>
 #include "commandqueue.h"
-#include "util.h"
+#include "util/mem.h"
 
 command_queue_t* command_queue_create(const size_t capacity) {
   command_queue_t* q;

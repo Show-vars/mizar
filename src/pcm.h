@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <math.h>
-#include "util_int128.h"
+#include "util/int128.h"
 #include "config.h"
 
 /*
@@ -15,7 +15,6 @@
     24-31  8      channels (0-255)
 */
 
-#define MAX_AUDIO_CHANNELS 8
 #ifdef WORDS_BIGENDIAN
   #define AF_NATIVE_ENDIAN 0x01
 #else

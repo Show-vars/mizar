@@ -12,7 +12,7 @@
 #include "pcm.h"
 #include "pcm_conv.h"
 #include "logging.h"
-#include "util.h"
+#include "osc_ctrl.h"
 
 #define PLAYBACK_BUFFER_FRAMES 1024 * 16
 #define PLAYBACK_IO_BUFFER_SAMPLES 1024
@@ -106,6 +106,7 @@ static void playback_calculate_rms(float* buffer, uint32_t frames) {
 
 static void playback_push_realtime_data(playback_realtime_data_t* realtime_data) {
   log_ddebug("[REALTIME] TIME: %lld, PPS: %d, PEAK: %f, RMS: %f", realtime_data->time, realtime_data->pps, realtime_data->peak[0],  realtime_data->rms[0]);
+  on_playback_realtime_data(realtime_data);
 }
 
 static void control_loop(void* arg) {

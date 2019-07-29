@@ -9,11 +9,12 @@ mizar_sources = [
   'src/output/alsa.c',
   'src/audiobuffer.c',
   'src/pcm_conv.c',
-  'src/commandqueue.c',
-  'src/extend.c',
-  'src/osc.c',
-  'src/osc_ctrl.c',
-  'src/playback.c',
+  'src/audio.c',
+  #'src/commandqueue.c',
+  #'src/extend.c',
+  #'src/osc.c',
+  #'src/osc_ctrl.c',
+  #'src/playback.c',
   'src/main.c',
 ]
 

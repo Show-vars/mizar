@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include "pcm_conv.h"
-#include "util_int128.h"
-#include "util.h"
+#include "util/mem.h"
+#include "util/int128.h"
 
 static void float_to_u8 (uint8_t *dst, const float *src, const uint32_t samples) {
 	for (uint32_t i = 0; i < samples; i++) {

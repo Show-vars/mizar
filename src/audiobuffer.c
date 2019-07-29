@@ -4,14 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "audiobuffer.h"
+#include "util/mem.h"
+#include "util/math.h"
 #include "pcm.h"
-#include "util.h"
 
 audiobuffer_t* audiobuffer_create(audio_format_t af, uint32_t frames) {
   audiobuffer_t* b;
 
   uint32_t capacity = frames * af_get_channels(af);
-  b = mmalloc(offsetof(audiobuffer_t, data) + capacity * sizeof(float));
+  b = pmalloc(offsetof(audiobuffer_t, data) + capacity * sizeof(float));
   
   b->af = af;
   b->capacity = capacity;

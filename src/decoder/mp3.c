@@ -1,15 +1,14 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include "pcm.h"
-#include "util.h"
+#include "util/mem.h"
 #include "decoder/decoder_impl.h"
 
 #define DR_MP3_IMPLEMENTATION
 #include "decoder/dr_libs/dr_mp3.h"
 
-
 int decoder_mp3_open(decoder_data_t *data) {
-  drmp3 *mp3 = mmalloc(sizeof(drmp3));
+  drmp3 *mp3 = pmalloc(sizeof(drmp3));
   data->af = af_endian(0) | af_format(SF_FORMAT_S16) | af_rate(44100) | af_channels(2);
   data->priv = mp3;
 
