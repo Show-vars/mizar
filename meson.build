@@ -9,7 +9,8 @@ mizar_sources = [
   'src/output/alsa.c',
   'src/audiobuffer.c',
   'src/pcm_conv.c',
-  'src/audio.c',
+  'src/audio_io.c',
+  'src/audio_ctrl.c',
   #'src/commandqueue.c',
   #'src/extend.c',
   #'src/osc.c',
@@ -32,13 +33,14 @@ configure_file(output: 'config.h', configuration: conf)
 
 cc = meson.get_compiler('c')
 m_dep = cc.find_library('m', required : false)
+atomic_dep = cc.find_library('atomic', required : false)
 thread_dep = dependency('threads')
 libuv_dep = subproject('libuv')
 lua_dep   = subproject('lua')
 
 
 mizar_deps = [
-  m_dep, thread_dep,
+  m_dep, atomic_dep, thread_dep, 
   dependency('libuv', version: '>=1.18',  fallback: ['libuv', 'libuv_dep']),
   dependency('alsa',  version: '>=1.1.3'),
   dependency('lua',   version: '>=5.3.0', fallback: ['lua', 'lua_dep'])

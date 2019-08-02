@@ -5,7 +5,7 @@
 #include "pcm.h"
 #include "logging.h"
 
-#define ALSA_BUFFER_TIME_MAX 500 * 1000;  // 300 ms
+#define ALSA_BUFFER_TIME_MAX 20 * 1e3;  // 20 ms
 
 static audio_format_t alsa_af;
 
@@ -48,7 +48,7 @@ static int alsa_set_hw_params() {
     return -1;
   }
 
-  log_write(MIZAR_LOGLEVEL_DEBUG, "ALSA", "Buffer time: %d us", buffer_time_max);
+  log_write(MIZAR_LOGLEVEL_DEBUG, "ALSA", "Buffer time: %.2f ms", (float)buffer_time_max / 1e3);
 
   alsa_can_pause = snd_pcm_hw_params_can_pause(hwparams);
   
@@ -138,12 +138,6 @@ static int output_alsa_open(audio_format_t af) {
     return -1;
   }
 
-  rc = snd_pcm_nonblock(alsa_handle, 1);
-  if (rc < 0) {
-    log_error("Error: snd_pcm_nonblock");
-    return -1;
-  }
-
   return 0;
 }
 
@@ -201,7 +195,7 @@ static uint32_t output_alsa_wait() {
   uint32_t frames = output_alsa_get_available();
   if(frames > 0) return frames;
 
-  snd_pcm_sframes_t alsa_frames = snd_pcm_wait(alsa_handle, 1000);
+  snd_pcm_sframes_t alsa_frames = snd_pcm_wait(alsa_handle, 100);
   if (alsa_frames < 0) return 0;
 
   return output_alsa_get_available();
