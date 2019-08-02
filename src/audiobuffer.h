@@ -6,7 +6,7 @@
 #include "pcm.h"
 
 /**
- * Audio ring buffer implementation. Thread safe for one producer and one consumer.
+ * Audio ring buffer implementation. Thread safe and lock free for one producer and one consumer.
  * 
  * This buffer can only hold array of float values.
  */
@@ -78,7 +78,7 @@ void audiobuffer_set_frames(audiobuffer_t* b, uint64_t frame);
 /**
  * Begin reading routine
  * 
- * This function blocks until data became accessible
+ * This function return immediately if no data available
  *
  * @param b Pointer to initialized buffer
  * @param max_frames Maximum frames number that can be processed in this routine
@@ -106,8 +106,6 @@ uint32_t audiobuffer_read_consume(audiobuffer_t* b, const uint32_t frames);
 
 /**
  * End current read routine
- * 
- * This function blocks until data became accessible
  *
  * @param b Pointer to initialized buffer
  * @return Number of frames was proccessed by current read routine
@@ -117,7 +115,7 @@ uint32_t audiobuffer_read_end(audiobuffer_t* b);
 /**
  * Begin writing routine
  * 
- * This function blocks until data became accessible
+ * This function return immediately if no space available
  *
  * @param b Pointer to initialized buffer
  * @param max_frames Maximum number of frames number that can be processed in this routine
@@ -145,8 +143,6 @@ uint32_t audiobuffer_write_fill(audiobuffer_t* b, const uint32_t frames);
 
 /**
  * End current write routine
- * 
- * This function blocks until data became accessible
  *
  * @param b Pointer to initialized buffer
  * @return Number of frames was proccessed by current write routine
