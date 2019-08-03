@@ -26,7 +26,6 @@ struct audio_pps_history {
 
 struct audio_bus {
   struct audio_volmeter volmeter;
-
   float buffer[AUDIO_IO_MAX_CHANNELS][AUDIO_IO_OUTPUT_FRAMES];
 };
 
@@ -34,6 +33,7 @@ struct audio_input {
   audio_input_callback_t callback;
   int bus_idx;
   void *param;
+  float buffer[AUDIO_IO_MAX_CHANNELS][AUDIO_IO_OUTPUT_FRAMES];
 };
 
 struct audio_output {
@@ -114,10 +114,49 @@ static void audio_input(struct audio_data *data, uint32_t frames, void *param) {
   data->frames = pcm_fixed_to_float(decoder.data.af, data->data[0], input_buf, r);
 }
 
-static void audio_input_output(struct audio_io *audio) {
-  struct audio_data data[AUDIO_IO_BUSES];
+static inline void clamp_audio(struct audio_data *mix) {
+  size_t frames = mix->frames;
 
-  memset(data, 0, sizeof(data));
+  for (size_t ch = 0; ch < AUDIO_IO_MAX_CHANNELS; ch++) {
+    register float *m = mix->data[ch];
+    register float *end = &m[frames];
+
+    while (m < end) {
+      register float v = *m;
+      *(m++) = clamp(v, -1.0f, 1.0f);
+    }
+  }
+}
+
+static inline void mix_audio(struct audio_data *mix, struct audio_data *input) {
+  size_t frames = min(mix->frames, input->frames);
+  
+  for (size_t ch = 0; ch < AUDIO_IO_MAX_CHANNELS; ch++) {
+    register float *m = mix->data[ch];
+    register float *i = input->data[ch];
+    register float *end = i + frames;
+
+    while (i < end) *(m++) += *(i++);
+  }
+}
+
+static void audio_input_output(struct audio_io *audio) {
+  struct audio_data input_data[AUDIO_IO_INPUTS];
+  struct audio_data bus_data[AUDIO_IO_INPUTS];
+
+  memset(input_data, 0, sizeof(input_data));
+  memset(bus_data, 0, sizeof(bus_data));
+
+  for(int inp_idx = 0; inp_idx < AUDIO_IO_INPUTS; inp_idx++) {
+    struct audio_input *input = &audio->input[inp_idx];
+    
+    memset(input->buffer[0], 0, AUDIO_IO_OUTPUT_FRAMES * AUDIO_IO_MAX_CHANNELS * sizeof(float));
+
+    for(uint8_t ch = 0; ch < AUDIO_IO_MAX_CHANNELS; ch++) {
+      input_data[inp_idx].frames = AUDIO_IO_OUTPUT_FRAMES;
+      input_data[inp_idx].data[ch] = input->buffer[ch];
+    }
+  }
 
   for(int bus_idx = 0; bus_idx < AUDIO_IO_BUSES; bus_idx++) {
     struct audio_bus *bus = &audio->buses[bus_idx];
@@ -125,23 +164,28 @@ static void audio_input_output(struct audio_io *audio) {
     memset(bus->buffer[0], 0, AUDIO_IO_OUTPUT_FRAMES * AUDIO_IO_MAX_CHANNELS * sizeof(float));
 
     for(uint8_t ch = 0; ch < AUDIO_IO_MAX_CHANNELS; ch++) {
-      data[bus_idx].data[ch] = bus->buffer[ch];
+      bus_data[bus_idx].frames = AUDIO_IO_OUTPUT_FRAMES;
+      bus_data[bus_idx].data[ch] = bus->buffer[ch];
     }
   }
 
   for(int inp_idx = 0; inp_idx < AUDIO_IO_INPUTS; inp_idx++) {
     struct audio_input *input = &audio->input[inp_idx];
 
-    if(input->callback) input->callback(&data[input->bus_idx], AUDIO_IO_OUTPUT_FRAMES, input->param);
+    if(input->callback) {
+      input->callback(&input_data[inp_idx], AUDIO_IO_OUTPUT_FRAMES, input->param);
+      mix_audio(&bus_data[input->bus_idx], &input_data[inp_idx]);
+    }
   }
 
   for(int bus_idx = 0; bus_idx < AUDIO_IO_BUSES; bus_idx++) {
-    data[bus_idx].frames = AUDIO_IO_OUTPUT_FRAMES;
-    audio_calculate_peak(audio, bus_idx, &data[bus_idx]);
-    audio_calculate_rms(audio, bus_idx, &data[bus_idx]);
+    clamp_audio(&bus_data[bus_idx]);
+
+    audio_calculate_peak(audio, bus_idx, &bus_data[bus_idx]);
+    audio_calculate_rms(audio, bus_idx, &bus_data[bus_idx]);
   }
 
-  audio->output.callback(&data[0], AUDIO_IO_OUTPUT_FRAMES, audio->output.param);
+  audio->output.callback(&bus_data[0], AUDIO_IO_OUTPUT_FRAMES, audio->output.param);
 }
 
 static void *audio_thread(void *param) {
