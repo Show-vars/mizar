@@ -40,8 +40,7 @@ lua_dep   = subproject('lua')
 
 
 mizar_deps = [
-  m_dep, atomic_dep, thread_dep, 
-  dependency('libuv', version: '>=1.18',  fallback: ['libuv', 'libuv_dep']),
+  m_dep, atomic_dep, thread_dep,
   dependency('alsa',  version: '>=1.1.3'),
   dependency('lua',   version: '>=5.3.0', fallback: ['lua', 'lua_dep'])
 ]
